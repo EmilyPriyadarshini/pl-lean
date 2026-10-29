@@ -122,13 +122,13 @@ example : swapNatBool (0, false) = (false, 0) := by rfl
 /- __Exercise (difficulty: 1/4)__ Define the following functions using projections. -/
 
 def sumComponents (p : Nat × Nat) : Nat :=
-  p.1 + p.2
+  sorry
 
 def keepFirstAndDoubleSecond (p : Nat × Nat) : Nat × Nat :=
-  (p.1, 2 * p.2)
+  sorry
 
-example : sumComponents (3, 4) = 7 := by rfl
-example : keepFirstAndDoubleSecond (3, 4) = (3, 8) := by rfl
+example : sumComponents (3, 4) = 7                  := by sorry
+example : keepFirstAndDoubleSecond (3, 4) = (3, 8)  := by sorry
 
 end Projections
 
@@ -247,6 +247,7 @@ applies two computations to the same input and returns both results.
 def bothResultsN (f g : Nat → Nat) (n : Nat) : Nat × Nat :=
   (f n, g n)
 
+example : bothResultsN Nat.succ (Nat.pred) 2 = (1,3) := sorry
 example : bothResultsN Nat.succ (fun n => n+n) 5 = sorry := sorry
 
 /- __Exercise (difficulty: 1/4)__ Define a function `minMax` that takes as input two numbers,
@@ -349,11 +350,31 @@ Given a pair `p`, we show that it is equivalent to the pair of its projections.
 This property is useful when a proof decomposes a pair and later reconstructs it.
 -/
 
-theorem pair_eta_NatBool (p : Nat × Bool) :
-    (p.1, p.2) = p := by
-  match p with
-  | (a,b) => rfl
+theorem pair_eta_NatBool (p : Nat × Bool) : (p.1, p.2) = p := by
+  cases p with
+  | mk a b =>
+    rfl
 
+/-
+The tactic `cases` exposes how a value was constructed. For pairs, however,
+writing the constructor name `mk` and a separate case branch is somewhat verbose.
+
+The tactic `rcases` combines case analysis with a **destructuring pattern**.
+The pattern
+
+    ⟨a, b⟩
+
+describes a pair and gives the names `a` and `b` to its two components.
+Therefore,
+
+    rcases p with ⟨a, b⟩
+
+decomposes `p` directly into its components.
+-/
+
+theorem pair_eta_NatBool₂ (p : Nat × Bool) : (p.1, p.2) = p := by
+  rcases p with ⟨a,b⟩
+  rfl
 
 /-
 We now prove that `swapNatBool` is injective. More than the theorem itself, it is
@@ -371,6 +392,17 @@ theorem swapNatBool_inj (p1 p2 : Nat × Bool) : swapNatBool p1 = swapNatBool p2 
                                 -- with `And.intro`, the `cases` tactic destructs it with `intro`
       | intro c1 c2 =>          -- `c1` and `c2` are the names of the two conjuncts
         rw [c1,c2]              -- we close the proof by rewriting them in the goal.
+
+/- Using `rcases` allows for a more concise proof. -/
+
+theorem swapNatBool_inj₂ (p1 p2 : Nat × Bool) : swapNatBool p1 = swapNatBool p2 → p1 = p2 := by
+  intro h
+  rcases p1 with ⟨n1, b1⟩
+  rcases p2 with ⟨n2, b2⟩
+  -- The hypothesis becomes `(b1, n1) = (b2, n2)`.
+  simp [swapNatBool] at h
+  rcases h with ⟨n12,b12⟩
+  rw [n12,b12]
 
 end Proofs_about_products
 
@@ -415,10 +447,10 @@ def swapBoolNat : Bool × Nat → Nat × Bool
 /- __Exercise (difficulty: 1/4)__ Prove both round trips. -/
 
 theorem swapBoolNat_comp_swapNatBool_id (p : Nat × Bool) : swapBoolNat (swapNatBool p) = p := by
-  rfl
+  sorry
 
 theorem swapNatBool_comp_swapBoolNat_id (p : Bool × Nat) : swapNatBool (swapBoolNat p) = p := by
-  rfl
+  sorry
 
 end Type_isomorphisms
 
@@ -527,7 +559,15 @@ structure has one constructor carrying all its fields.
 -/
 
 def getX : Point → Nat
-  | { x, y := _ } => x
+  | { x, y } => x
+
+/-
+Lean reports a warning for `y` because the pattern binds both fields of the
+structure, but the body uses only `x`. This is not an error: the definition is
+valid, but Lean warns us that the name `y` is unnecessary.
+
+To remove the warning, use the pattern `{ x, y := _ }`
+-/
 
 example : pointA.x = getX pointA := by rfl
 
@@ -662,15 +702,98 @@ def succOrNot : Nat ⊕ Bool → Nat ⊕ Bool
 example : succOrNot (.inl 5) = .inl 6         := by sorry
 example : succOrNot (.inr true) = .inr false  := by sorry
 
-
 end Pattern_matching
 
+
+section Proofs_about_sums
+
+/-
+The sum type `Nat ⊕ Bool` has two constructors:
+
+    Sum.inl : Nat  → Nat ⊕ Bool
+    Sum.inr : Bool → Nat ⊕ Bool
+
+The following functions inspect which constructor was used, without inspecting
+the value stored by that constructor.
+-/
+
+def isLeft : Nat ⊕ Bool → Bool
+  | .inl _ => true
+  | .inr _ => false
+
+def isRight : Nat ⊕ Bool → Bool
+  | .inl _ => false
+  | .inr _ => true
+
+example : isLeft (.inl 3) = true := by rfl
+example : isLeft (.inr false) = false := by rfl
+
+/-
+For every sum value, `isLeft` returns the negation of `isRight`.
+
+Lean cannot prove this immediately by computation because `s` is arbitrary:
+it does not yet know which constructor produced it. The tactic `cases s`
+considers the two possible constructors separately.
+-/
+
+theorem isLeft_not_isRight (s : Nat ⊕ Bool) : isLeft s = !(isRight s) := by
+  cases s with
+  | inl n =>              -- `s` has the form `.inl n`
+    rw [isLeft,isRight]   -- rw is not necessary! It is here just to let you observe the InfoView
+    rfl
+  | inr b =>              -- `s` has the form `.inr b`
+    rfl
+
+/-
+The same proof can be written more compactly with `rcases`.
+
+For a sum, the pattern
+
+    n | b
+
+describes its two alternatives. The tactic creates two goale:
+one goal with `n : Nat`, and another goal with `b : Bool`.
+-/
+
+theorem isLeft_not_isRight₂ (s : Nat ⊕ Bool) : isLeft s = !(isRight s) := by
+  rcases s with n | b
+  · -- Case `s = .inl n`
+    rfl
+  · -- Case `s = .inr b`
+    rfl
+
+/-
+The tactic `rcases` can combine product and sum patterns.
+
+For example, consider a value `p` with type
+
+    Nat × (Bool ⊕ Nat)
+
+We can deconstruct `p` as follows:
+
+  rcases p with ⟨n, b | m⟩
+
+* `⟨n, ...⟩` decomposes the outer product;
+* `b | m` considers the two constructors of the inner sum.
+
+Consequently, `rcases` creates two goals.
+-/
+
+example (p : Nat × (Bool ⊕ Nat)) : Nat × Bool := by
+  rcases p with ⟨n, b | m⟩
+  · -- Here `p` had the form `(n, .inl b)`.
+    exact (n, b)
+  · -- Here `p` had the form `(n, .inr m)`.
+    exact (m, false)
+
+
+end Proofs_about_sums
 
 
 section Type_isomorphisms
 
 /-
-As with products, the type operator is commutative up-to isomorphism. In particular, we prove that:
+As with products, the type operator ⊕ is commutative up-to isomorphism. In particular, we prove that:
 
     Nat ⊕ Bool  ≅  Bool ⊕ Nat
 -/
@@ -811,25 +934,6 @@ example : (partial_sum₂ partial_pred₂ (partial_sub 10)) 0  = none   := by so
 example : (partial_sum₂ partial_pred₂ (partial_sub 10)) 11 = none   := by sorry
 example : (partial_sum₂ partial_pred₂ (partial_sub 10)) 2  = some 9 := by sorry
 
-end Partial_functions
-
-
-section Proofs_about_sums
-
-/-
-The sum type `A ⊕ B` has two constructors:
-
-    Sum.inl : A → A ⊕ B
-    Sum.inr : B → A ⊕ B
-
-Consequently, pattern matching needs to distinguish between different constructors:
-
-    match s with
-    | .inl a => ...
-    | .inr b => ...
-
-This differs from product types, which have a single constructor.
--/
 
 /-
 We now prove that `partial_sum` is commutative. More than the theorem itself, it is
@@ -850,7 +954,7 @@ theorem partial_sum_comm (f1 f2: Nat → Nat ⊕ Unit) (n : Nat) : partial_sum f
     | _ => simp [partial_sum, h1, h2]
 
 
-end Proofs_about_sums
+end Partial_functions
 
 
 end Sum_types
